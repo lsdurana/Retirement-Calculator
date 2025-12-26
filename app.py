@@ -1,28 +1,37 @@
 import streamlit as st
 import pandas as pd
-import numpy_financial as npf # You may need to add this to requirements.txt
+import numpy_financial as npf
 
 st.set_page_config(page_title="Retirement Master", layout="wide")
 
-# --- APP NAVIGATION ---
-tab1, tab2 = st.tabs(["Check My Current Path", "Calculate My Target Goal"])
-
-# --- COMMON SIDEBAR INPUTS ---
+# --- GLOBAL SIDEBAR ---
 with st.sidebar:
-    st.header("Global Assumptions")
+    st.header("1. Core Assumptions")
+    current_age = st.number_input("Current Age", value=35, step=1)
     retire_age = st.slider("Target Retirement Age", 50, 80, 65)
     death_age = st.slider("Planning Horizon (Age)", 80, 110, 95)
+    
+    st.header("2. Market Rates")
     inflation = st.slider("Inflation Rate (%)", 0.0, 10.0, 3.0) / 100
-    returns = st.slider("Annual Return (%)", 0.0, 15.0, 6.0) / 100
+    returns = st.slider("Annual Return (%)", 0.0, 15.0, 7.0) / 100
+    
+    st.header("3. Extra Costs")
     medical = st.number_input("Annual Medical Buffer ($)", value=5000)
+
+# --- APP NAVIGATION ---
+tab1, tab2, tab3 = st.tabs(["Check Current Path", "Target Goal", "Monthly Savings Plan"])
+
+# Calculate Real Rate of Return
+real_rate = (1 + returns) / (1 + inflation) - 1
+years_in_retirement = death_age - retire_age
+years_to_save = retire_age - current_age
 
 # --- TAB 1: HOW LONG WILL MY MONEY LAST? ---
 with tab1:
     st.header("Will my current savings last?")
-    assets = st.number_input("Current Retirement Assets ($)", value=1000000, step=10000)
+    assets = st.number_input("Current Retirement Assets ($)", value=500000, step=10000)
     expenses = st.number_input("Annual Living Expenses ($)", value=60000, step=1000)
     
-    # Logic same as before...
     balance = assets
     data = []
     fail_age = None
@@ -36,30 +45,16 @@ with tab1:
 
     st.line_chart(pd.DataFrame(data).set_index("Age"))
     if fail_age:
-        st.error(f"Your money runs out at age {fail_age}")
+        st.error(f"⚠️ Funds exhausted at age {fail_age}")
     else:
-        st.success(f"You're set! Remaining at {death_age}: ${balance:,.2f}")
+        st.success(f"✅ Your money lasts until {death_age}+ (Remaining: ${balance:,.2f})")
 
 # --- TAB 2: HOW MUCH DO I NEED? ---
 with tab2:
     st.header("Find your 'Target Number'")
-    target_expenses = st.number_input("Desired Annual Income ($)", value=70000)
+    target_expenses = st.number_input("Desired Annual Income in Retirement ($)", value=70000)
     
-    # Financial Math: Real Rate of Return
-    # We use the Fisher Equation to find the 'Inflation-Adjusted Return'
-    real_rate = (1 + returns) / (1 + inflation) - 1
-    years_in_retirement = death_age - retire_age
-    
-    # PV of Annuity Formula
     if real_rate == 0:
-        required_amount = target_expenses * years_in_retirement
+        required_amount = (target_expenses + medical) * years_in_retirement
     else:
-        required_amount = target_expenses * ((1 - (1 + real_rate) ** -years_in_retirement) / real_rate)
-
-    st.metric(label=f"Your Target Nest Egg at Age {retire_age}", value=f"${required_amount:,.2f}")
-    
-    st.info(f"""
-    **Why this number?** To live on **${target_expenses:,.0f}/year** for **{years_in_retirement} years**, 
-    while your money grows at **{returns*100:.1f}%** but prices rise by **{inflation*100:.1f}%**, 
-    you need exactly **${required_amount:,.2f}** the day you stop working.
-    """)
+        required_amount = (target_expenses + medical
